@@ -64,28 +64,48 @@ struct ProtocolTypesImpl<std::variant<Ts...>, Var<N>> {
 template <HasDual P>
 using ProtocolTypes = MakeUniqueVariant<typename ProtocolTypesImpl<std::variant<>, P>::type>;
 
+template <typename T, typename V>
+struct OneOf : public std::false_type {};
+
+template <typename T, typename... Ts>
+struct OneOf<T, std::variant<Ts...>> : public std::conditional<
+        (std::is_same_v<T, Ts> || ...),
+        std::true_type,
+        std::false_type
+    >::type
+{};
+
+template <typename T, typename V>
+concept AssignableToVariant = OneOf<T, V>::value;
+
 void log(const std::string &tname, const std::string &action, int val) {
     printf("%s %s %d\n", tname.c_str(), action.c_str(), val);
 }
 
 /*
- * A communication primitive for multiple threads to read/write shared data.
+ * A communication medium for multiple threads to read/write shared data.
+ *
+ * Allows multiple threads to communicate objects in a variant.
+ *
  * Guarantees:
  *  - No thread reads its own writes.
  *  - Every write is read.
  */
-template <HasDual P>
-class ConcurrentChannel {
+template <typename T>
+class ConcurrentMedium;
+
+template <typename... Ts>
+class ConcurrentMedium<std::variant<Ts...>> {
 public:
-    ConcurrentChannel()
+    ConcurrentMedium()
         : was_read(true), writers_waiting(0), readers_waiting(0) {}
 
-     ConcurrentChannel(const ConcurrentChannel &other) = delete;
+     ConcurrentMedium(const ConcurrentMedium &other) = delete;
 
-     ConcurrentChannel& operator=(const ConcurrentChannel &other) = delete;
+     ConcurrentMedium& operator=(const ConcurrentMedium &other) = delete;
 
-    template <typename T>
-    ConcurrentChannel& operator<<(const T &value) {
+    template <AssignableToVariant<std::variant<Ts...>> T>
+    ConcurrentMedium& operator<<(const T &value) {
         std::unique_lock held_lock(lock);
         while (!was_read) {
             // Needs to be in a while loop to ignore "spurious wakeups".
@@ -106,8 +126,8 @@ public:
         return *this;
     }
 
-    template <typename T>
-    ConcurrentChannel& operator>>(T &datum) {
+    template <AssignableToVariant<std::variant<Ts...>> T>
+    ConcurrentMedium& operator>>(T &datum) {
         std::unique_lock held_lock(lock);
         while (write_source == std::this_thread::get_id() || was_read) {
             readers_waiting++;
@@ -134,7 +154,7 @@ private:
     int writers_waiting;
     std::condition_variable writer_cv;
 
-    ProtocolTypes<P> data;
+    std::variant<Ts...> data;
     std::thread::id write_source;
     bool was_read;
 };
@@ -240,10 +260,11 @@ auto t1_v3 = [](auto chan) {
 // }
 
 int main() {
-    auto chan = std::make_shared<ConcurrentChannel<Protocol>>();
+    auto chan = std::make_shared<ConcurrentMedium<ProtocolTypes<Protocol>>>();
     auto threads = connect<Protocol>(t1, t2, chan);
     threads.first.join();
     threads.second.join();
+
     //ch >> val;
 
     // UniqueVariant<int, char, int, char, float, char, std::string> v;
