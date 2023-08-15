@@ -235,60 +235,110 @@ private:
 };
 
 template <HasDual P,
-          std::invocable<Chan<P, std::shared_ptr<ConcurrentChannel<P>>, std::shared_ptr<ConcurrentChannel<P>>>> F,
-          std::invocable<Chan<typename P::dual, std::shared_ptr<ConcurrentChannel<P>>, std::shared_ptr<ConcurrentChannel<P>>>> G>
-std::pair<std::thread, std::thread> connect(F f, G g) {
-    std::shared_ptr<ConcurrentChannel<P>> inner_chan = std::make_shared<ConcurrentChannel<P>>();
-    Chan<P, decltype(inner_chan), decltype(inner_chan)> c1(inner_chan, inner_chan);
-
-    std::shared_ptr<ConcurrentChannel<P>> inner_chan2 = inner_chan;
-    Chan<typename P::dual, decltype(inner_chan), decltype(inner_chan)> c2(inner_chan2, inner_chan2);
+          typename CommunicationMedium,
+          std::invocable<Chan<P, CommunicationMedium, CommunicationMedium>> F,
+          std::invocable<Chan<typename P::dual, CommunicationMedium, CommunicationMedium>> G>
+std::pair<std::thread, std::thread> connect(F f, G g, CommunicationMedium chan) {
+    Chan<P, CommunicationMedium, CommunicationMedium> c1(chan, chan);
+    Chan<typename P::dual, CommunicationMedium, CommunicationMedium> c2(chan, chan);
     return {std::thread(f, c1), std::thread(g, c2)};
 }
 
 using Protocol = Rec<Send<int, Recv<int, Var<Z>>>>;
 
-void t1(Chan<Protocol,
-             std::shared_ptr<ConcurrentChannel<Protocol>>,
-             std::shared_ptr<ConcurrentChannel<Protocol>>> chan) {
-    std::cout << "t1: " << std::this_thread::get_id() << std::endl;
-    auto c = chan.enter();
-    for (int i = 0; i < 5; i++) {
-        auto c1 = c << i;
-        log("T1", "sent", i);
-
+struct {
+    template <typename CommunicationMedium>
+    void operator()(Chan<Protocol, CommunicationMedium, CommunicationMedium> chan) {
         int val;
-        auto c2 = c1 >> val;
-        log("T1", "received", val);
 
-        c = c2.ret().enter();
+        auto c = chan.enter();
+        for (int i = 0; i < 5; i++) {
+            auto c1 = c << i;
+            log("T1", "sent", i);
+
+            int val;
+            auto c2 = c1 >> val;
+            log("T1", "received", val);
+
+            c = c2.ret().enter();
+        }
+        log("T1", "done", -1);
     }
-    log("T1", "done", -1);
-}
+} t1;
 
-void t2(Chan<Protocol::dual,
-             std::shared_ptr<ConcurrentChannel<Protocol>>,
-             std::shared_ptr<ConcurrentChannel<Protocol>>> chan) {
-    std::cout << "t2: " << std::this_thread::get_id() << std::endl;
-    auto c = chan.enter();
-    for (int i = 0; i < 5; i++) {
-        int val;
-        auto c1 = c >> val;
-        log("T2", "received", val);
+struct {
+    template <typename CommunicationMedium>
+    void operator()(Chan<Protocol::dual, CommunicationMedium, CommunicationMedium> chan) {
+        auto c = chan.enter();
+        for (int i = 0; i < 5; i++) {
+            int val;
+            auto c1 = c >> val;
+            log("T2", "received", val);
 
-        auto c2 = c1 << val * 2;
-        log("T2", "sent", val * 2);
+            auto c2 = c1 << val * 2;
+            log("T2", "sent", val * 2);
 
-        c = c2.ret().enter();
+            c = c2.ret().enter();
+        }
+        log("T2", "done", -1);
     }
-    log("T2", "done", -1);
-}
+} t2;
+
+auto t1_v3 = [](auto chan) {
+        auto c = chan.enter();
+        int x;
+        for (int i = 0; i < 5; i++) {
+            auto c1 = c << i;
+            log("T1", "sent", i);
+
+            int val;
+            auto c2 = c1 >> val;
+            log("T1", "received", val);
+
+            c = c2.ret().enter();
+        }
+        log("T1", "done", -1);
+};
+
+// template <typename CommunicationMedium>
+// void t1(Chan<Protocol, CommunicationMedium, CommunicationMedium> chan) {
+//     std::cout << "t1: " << std::this_thread::get_id() << std::endl;
+//     auto c = chan.enter();
+//     for (int i = 0; i < 5; i++) {
+//         auto c1 = c << i;
+//         log("T1", "sent", i);
+
+//         int val;
+//         auto c2 = c1 >> val;
+//         log("T1", "received", val);
+
+//         c = c2.ret().enter();
+//     }
+//     log("T1", "done", -1);
+// }
+
+// template <typename CommunicationMedium>
+// void t2(Chan<Protocol::dual, CommunicationMedium, CommunicationMedium> chan) {
+//     std::cout << "t2: " << std::this_thread::get_id() << std::endl;
+//     auto c = chan.enter();
+//     for (int i = 0; i < 5; i++) {
+//         int val;
+//         auto c1 = c >> val;
+//         log("T2", "received", val);
+
+//         auto c2 = c1 << val * 2;
+//         log("T2", "sent", val * 2);
+
+//         c = c2.ret().enter();
+//     }
+//     log("T2", "done", -1);
+// }
 
 int main() {
-    auto threads = connect<Protocol>(t1, t2);
+    auto chan = std::make_shared<ConcurrentChannel<Protocol>>();
+    auto threads = connect<Protocol>(t1, t2, chan);
     threads.first.join();
     threads.second.join();
-
     //ch >> val;
 
     // UniqueVariant<int, char, int, char, float, char, std::string> v;

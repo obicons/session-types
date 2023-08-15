@@ -90,7 +90,7 @@ public:
         }
 
         used = true;
-        input->operator>>(t);
+        (*input) >> t;
         return Chan<P, IT, OT, E>(input, output);
     }
 };
@@ -106,7 +106,7 @@ public:
         }
 
         used = true;
-        output->operator<<(t);
+        (*output) << t;
         return Chan<P, IT, OT, E>(input, output);
     }
 };
