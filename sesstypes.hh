@@ -2,6 +2,7 @@
 
 #include <concepts>
 #include <iostream>
+#include <type_traits>
 
 template <typename T>
 concept HasDual = requires { typename T::dual; };
@@ -14,25 +15,21 @@ template <typename T>
 struct Succ;
 
 template <typename T>
-struct IsNatImpl;
+struct IsNatImpl : std::false_type {};
 
 template <>
-struct IsNatImpl<Z> {
-    using value = std::true_type;
-};
+struct IsNatImpl<Z> : std::true_type {};
 
 template <typename T>
-struct IsNatImpl {
-    using value = std::false_type;
-};
+struct IsNatImpl<Succ<T>>
+    : std::conditional_t<
+                IsNatImpl<T>::value,
+                std::true_type,
+                std::false_type
+      > {};
 
 template <typename T>
-struct IsNatImpl<Succ<T>> {
-    using value = typename IsNatImpl<T>::value;
-};
-
-template <typename T>
-concept IsNat = std::same_as<typename IsNatImpl<T>::value, std::true_type>;
+concept IsNat = IsNatImpl<T>::value;
 
 template <>
 struct Succ<Z> {};
