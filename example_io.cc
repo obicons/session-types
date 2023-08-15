@@ -5,10 +5,8 @@
 using namespace std;
 
 int main() {
-    Chan<
-        Rec<Recv<int, Send<std::string, Send<int, Send<ostream&(ostream&), Var<Z>>>>>>,
-        decltype(&cin),
-        decltype(&cout)> ch(&cin, &cout);
+    using Protocol = Rec<Recv<int, Send<std::string, Send<int, Send<ostream&(ostream&), Var<Z>>>>>>;
+    Chan<Protocol, decltype(&cin), decltype(&cout)> ch(&cin, &cout);
     int input = 0;
 
     while (input != -1) {

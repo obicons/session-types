@@ -1,12 +1,8 @@
 #include <condition_variable>
-#include <cstdio>
-#include <iostream>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <thread>
 #include <type_traits>
-#include <tuple>
 #include <variant>
 #include "sesstypes.hh"
 
@@ -77,10 +73,6 @@ struct OneOf<T, std::variant<Ts...>> : public std::conditional<
 
 template <typename T, typename V>
 concept AssignableToVariant = OneOf<T, V>::value;
-
-void log(const std::string &tname, const std::string &action, int val) {
-    printf("%s %s %d\n", tname.c_str(), action.c_str(), val);
-}
 
 /*
  * A communication medium for multiple threads to read/write shared data.
@@ -167,128 +159,4 @@ std::pair<std::thread, std::thread> connect(F f, G g, CommunicationMedium chan) 
     Chan<P, CommunicationMedium, CommunicationMedium> c1(chan, chan);
     Chan<typename P::dual, CommunicationMedium, CommunicationMedium> c2(chan, chan);
     return {std::thread(f, c1), std::thread(g, c2)};
-}
-
-using Protocol = Rec<Send<int, Recv<int, Var<Z>>>>;
-
-struct {
-    template <typename CommunicationMedium>
-    void operator()(Chan<Protocol, CommunicationMedium, CommunicationMedium> chan) {
-        int val;
-
-        auto c = chan.enter();
-        for (int i = 0; i < 5; i++) {
-            auto c1 = c << i;
-            log("T1", "sent", i);
-
-            int val;
-            auto c2 = c1 >> val;
-            log("T1", "received", val);
-
-            c = c2.ret().enter();
-        }
-        log("T1", "done", -1);
-    }
-} t1;
-
-struct {
-    template <typename CommunicationMedium>
-    void operator()(Chan<Protocol::dual, CommunicationMedium, CommunicationMedium> chan) {
-        auto c = chan.enter();
-        for (int i = 0; i < 5; i++) {
-            int val;
-            auto c1 = c >> val;
-            log("T2", "received", val);
-
-            auto c2 = c1 << val * 2;
-            log("T2", "sent", val * 2);
-
-            c = c2.ret().enter();
-        }
-        log("T2", "done", -1);
-    }
-} t2;
-
-auto t1_v3 = [](auto chan) {
-        auto c = chan.enter();
-        int x;
-        for (int i = 0; i < 5; i++) {
-            auto c1 = c << i;
-            log("T1", "sent", i);
-
-            int val;
-            auto c2 = c1 >> val;
-            log("T1", "received", val);
-
-            c = c2.ret().enter();
-        }
-        log("T1", "done", -1);
-};
-
-// template <typename CommunicationMedium>
-// void t1(Chan<Protocol, CommunicationMedium, CommunicationMedium> chan) {
-//     std::cout << "t1: " << std::this_thread::get_id() << std::endl;
-//     auto c = chan.enter();
-//     for (int i = 0; i < 5; i++) {
-//         auto c1 = c << i;
-//         log("T1", "sent", i);
-
-//         int val;
-//         auto c2 = c1 >> val;
-//         log("T1", "received", val);
-
-//         c = c2.ret().enter();
-//     }
-//     log("T1", "done", -1);
-// }
-
-// template <typename CommunicationMedium>
-// void t2(Chan<Protocol::dual, CommunicationMedium, CommunicationMedium> chan) {
-//     std::cout << "t2: " << std::this_thread::get_id() << std::endl;
-//     auto c = chan.enter();
-//     for (int i = 0; i < 5; i++) {
-//         int val;
-//         auto c1 = c >> val;
-//         log("T2", "received", val);
-
-//         auto c2 = c1 << val * 2;
-//         log("T2", "sent", val * 2);
-
-//         c = c2.ret().enter();
-//     }
-//     log("T2", "done", -1);
-// }
-
-int main() {
-    auto chan = std::make_shared<ConcurrentMedium<ProtocolTypes<Protocol>>>();
-    auto threads = connect<Protocol>(t1, t2, chan);
-    threads.first.join();
-    threads.second.join();
-
-    //ch >> val;
-
-    // UniqueVariant<int, char, int, char, float, char, std::string> v;
-    // v = "hello world";
-    // std::cout << std::get<std::string>(v) << std::endl;
-
-    // Cat<std::tuple<int, long>, std::tuple<std::string, char>, std::tuple<double>> c;
-    // static_assert(std::is_same_v<decltype(c), std::tuple<int, long, std::string, char, double>>);
-
-    // Flatten<std::tuple<>> c2;
-    // static_assert(std::is_same_v<decltype(c2), std::tuple<>>);
-
-    // Flatten<std::variant<int>> c3;
-    // static_assert(std::is_same_v<decltype(c3), std::variant<int>>);
-
-    // Flatten<std::variant<int, double>> c4;
-    // static_assert(std::is_same_v<decltype(c4), std::variant<int, double>>);
-
-    // Flatten<std::variant<int, std::variant<double>>> c5;
-    // static_assert(std::is_same_v<decltype(c5), std::variant<int, double>>);
-
-    // Flatten<std::variant<int, std::variant<std::variant<double>>>> c6;
-    // static_assert(std::is_same_v<decltype(c6), std::variant<int, double>>);
-
-    // Flatten<std::variant<std::variant<std::variant<int>>>> c7;
-    // static_assert(std::is_same_v<decltype(c7), std::variant<int>>);
 }
