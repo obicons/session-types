@@ -70,6 +70,7 @@ class ChanBase {
 public:
     ChanBase(IT input, OT output)
         : input(input), output(output), used(false) {}
+
 protected:
     IT input;
     OT output;
@@ -77,13 +78,13 @@ protected:
 };
 
 template <HasDual P, typename IT, typename OT, typename E=Z>
-class Chan : public ChanBase<IT, OT> {
+class Chan : ChanBase<IT, OT> {
 public:
     using ChanBase<IT, OT>::ChanBase;
 };
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
-class Chan<Recv<T, P>, IT, OT, E> : public ChanBase<IT, OT> {
+class Chan<Recv<T, P>, IT, OT, E> : ChanBase<IT, OT> {
 public:
     using ChanBase<IT, OT>::ChanBase;
 
@@ -99,7 +100,7 @@ public:
 };
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
-class Chan<Send<T, P>, IT, OT, E> : public ChanBase<IT, OT> {
+class Chan<Send<T, P>, IT, OT, E> : ChanBase<IT, OT> {
 public:
     using ChanBase<IT, OT>::ChanBase;
 
@@ -115,7 +116,7 @@ public:
 };
 
 template <HasDual P, typename IT, typename OT, typename E>
-class Chan<Rec<P>, IT, OT, E> : public ChanBase<IT, OT> {
+class Chan<Rec<P>, IT, OT, E> : ChanBase<IT, OT> {
 public:
     using ChanBase<IT, OT>::ChanBase;
 
@@ -130,7 +131,7 @@ public:
 };
 
 template <HasDual P, typename IT, typename OT, typename E>
-class Chan<Var<Z>, IT, OT, std::pair<P, E>> : public ChanBase<IT, OT> {
+class Chan<Var<Z>, IT, OT, std::pair<P, E>> : ChanBase<IT, OT> {
 public:
     using ChanBase<IT, OT>::ChanBase;
 
@@ -145,7 +146,7 @@ public:
 };
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
-class Chan<Var<Succ<T>>, IT, OT, std::pair<P, E>> : public ChanBase<IT, OT> {
+class Chan<Var<Succ<T>>, IT, OT, std::pair<P, E>> : ChanBase<IT, OT> {
 public:
     using ChanBase<IT, OT>::ChanBase;
 
