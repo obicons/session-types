@@ -33,97 +33,6 @@ using MakeUniqueVariant = typename MakeUniqueVariantImpl<T>::type;
 template <typename... Ts>
 using UniqueVariant = typename Unique<std::variant<>, Ts...>::type;
 
-// We don't need to rename if we just use std::variant from the start.
-template<typename A, template<typename...> typename B> struct RenameImpl;
-
-template<template<typename...> typename A, typename... T, template<typename...> typename B>
-struct RenameImpl<A<T...>, B> {
-    using type = B<T...>;
-};
-
-template<typename A, template<typename...> typename B>
-using RenameType = typename RenameImpl<A, B>::type;
-
-template<template<typename...> typename OldType, template<typename...> typename NewType, typename T>
-struct RenameAllOccurencesImpl;
-
-template<template<typename...> typename OldType,
-         template<typename...> typename NewType,
-         typename ...Ts>
-struct RenameAllOccurencesImpl<OldType, NewType, OldType<Ts...>> {
-    using type = NewType<typename RenameAllOccurencesImpl<OldType, NewType, Ts>::type...>;
-};
-
-template<template<typename...> typename OldType,
-         template<typename...> typename NewType,
-         template<typename...> typename ContainerType,
-         typename ...Ts>
-struct RenameAllOccurencesImpl<OldType, NewType, ContainerType<Ts...>> {
-    using type = ContainerType<typename RenameAllOccurencesImpl<OldType, NewType, Ts>::type...>;
-};
-
-template<template<typename...> typename OldType,
-         template<typename...> typename NewType,
-         typename T>
-struct RenameAllOccurencesImpl {
-    using type = T;
-};
-
-template<template<typename...> typename OldType,
-         template<typename...> typename NewType,
-         typename T>
-using RenameAllOccurences = typename RenameAllOccurencesImpl<OldType, NewType, T>::type;
-
-template<typename... Ts> struct CatImpl;
-
-template<typename... Ts>
-struct CatImpl<std::tuple<Ts...>> {
-    using type = std::tuple<Ts...>;
-};
-
-template<typename... Ts, typename... Us, typename... Vs>
-struct CatImpl<std::tuple<Ts...>, std::tuple<Us...>, Vs...> {
-    using type = typename CatImpl<std::tuple<Ts..., Us...>, Vs...>::type;
-};
-
-template<typename... Ts>
-using Cat = typename CatImpl<Ts...>::type;
-
-template<typename... Ts> struct FlattenImpl;
-
-template<typename... T1, typename... T2, typename... Ts>
-struct FlattenImpl<std::tuple<T1...>, std::tuple<T2...>,  Ts...> {
-    using type = Cat<typename std::tuple<T1...>,
-                     typename FlattenImpl<std::tuple<>, T2...>::type,
-                     typename FlattenImpl<std::tuple<>, Ts...>::type>;
-};
-
-template<typename... T1, typename T2, typename... Ts>
-struct FlattenImpl<std::tuple<T1...>, T2, Ts...> {
-    using type = Cat<typename std::tuple<T1...>,
-                     std::tuple<T2>,
-                     typename FlattenImpl<std::tuple<>, Ts...>::type>;
-};
-
-template<typename... Ts>
-struct FlattenImpl<std::tuple<Ts...>> {
-    using type = std::tuple<Ts...>;
-};
-
-template <typename A>
-struct FlattenOuter;
-
-template <template <typename...> typename A, typename ...Ts>
-struct FlattenOuter<A<Ts...>> {
-    using type = RenameType<
-        typename FlattenImpl<std::tuple<>, RenameAllOccurences<A, std::tuple, A<Ts...>>>::type,
-        A
-    >;
-};
-
-template <typename T>
-using Flatten = typename FlattenOuter<T>::type;
-
 template <typename Variant, typename T>
 struct ProtocolTypesImpl;
 
@@ -155,12 +64,8 @@ struct ProtocolTypesImpl<std::variant<Ts...>, Var<N>> {
 template <HasDual P>
 using ProtocolTypes = MakeUniqueVariant<typename ProtocolTypesImpl<std::variant<>, P>::type>;
 
-std::mutex io_lock;
-
 void log(const std::string &tname, const std::string &action, int val) {
-    io_lock.lock();
     printf("%s %s %d\n", tname.c_str(), action.c_str(), val);
-    io_lock.unlock();
 }
 
 /*
