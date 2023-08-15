@@ -3,15 +3,6 @@
 #include <concepts>
 #include <iostream>
 
-#define CHAN_BASE                                           \
-    public:                                                 \
-        Chan(IT input, OT output)                           \
-            : input(input), output(output), used(false) {}  \
-    private:                                                \
-        IT input;                                           \
-        OT output;                                          \
-        bool used;
-
 template <typename T>
 concept HasDual = requires { typename T::dual; };
 
@@ -74,84 +65,96 @@ struct Var {
 
 struct ChannelReusedError {};
 
+template <typename IT, typename OT>
+class ChanBase {
+public:
+    ChanBase(IT input, OT output)
+        : input(input), output(output), used(false) {}
+protected:
+    IT input;
+    OT output;
+    bool used;
+};
+
 template <HasDual P, typename IT, typename OT, typename E=Z>
-class Chan {
-    CHAN_BASE
+class Chan : public ChanBase<IT, OT> {
+public:
+    using ChanBase<IT, OT>::ChanBase;
 };
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
-class Chan<Recv<T, P>, IT, OT, E> {
-    CHAN_BASE
-
+class Chan<Recv<T, P>, IT, OT, E> : public ChanBase<IT, OT> {
 public:
+    using ChanBase<IT, OT>::ChanBase;
+
     Chan<P, IT, OT, E> operator>>(T &t) {
-        if (used) {
+        if (ChanBase<IT, OT>::used) {
             throw ChannelReusedError();
         }
 
-        used = true;
-        (*input) >> t;
-        return Chan<P, IT, OT, E>(input, output);
+        ChanBase<IT, OT>::used = true;
+        (*ChanBase<IT, OT>::input) >> t;
+        return Chan<P, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
     }
 };
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
-class Chan<Send<T, P>, IT, OT, E> {
-    CHAN_BASE
-
+class Chan<Send<T, P>, IT, OT, E> : public ChanBase<IT, OT> {
 public:
+    using ChanBase<IT, OT>::ChanBase;
+
     Chan<P, IT, OT, E> operator<<(const T &t) {
-        if (used) {
+        if (ChanBase<IT, OT>::used) {
             throw ChannelReusedError();
         }
 
-        used = true;
-        (*output) << t;
-        return Chan<P, IT, OT, E>(input, output);
+        ChanBase<IT, OT>::used = true;
+        (*ChanBase<IT, OT>::output) << t;
+        return Chan<P, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
     }
 };
 
 template <HasDual P, typename IT, typename OT, typename E>
-class Chan<Rec<P>, IT, OT, E> {
-    CHAN_BASE
-
+class Chan<Rec<P>, IT, OT, E> : public ChanBase<IT, OT> {
 public:
+    using ChanBase<IT, OT>::ChanBase;
+
     Chan<P, IT, OT, std::pair<Rec<P>, E>> enter() {
-        if (used) {
+        if (ChanBase<IT, OT>::used) {
             throw ChannelReusedError();
         }
 
-        used = true;
-        return Chan<P, IT, OT, std::pair<Rec<P>, E>>(input, output);
+        ChanBase<IT, OT>::used = true;
+        return Chan<P, IT, OT, std::pair<Rec<P>, E>>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
     }
 };
 
 template <HasDual P, typename IT, typename OT, typename E>
-class Chan<Var<Z>, IT, OT, std::pair<P, E>> {
-    CHAN_BASE
-
+class Chan<Var<Z>, IT, OT, std::pair<P, E>> : public ChanBase<IT, OT> {
 public:
+    using ChanBase<IT, OT>::ChanBase;
+
     Chan<P, IT, OT, E> ret() {
-        if (used) {
+        if (ChanBase<IT, OT>::used) {
             throw ChannelReusedError();
         }
 
-        used = true;
-        return Chan<P, IT, OT, E>(input, output);
+        ChanBase<IT, OT>::used = true;
+        return Chan<P, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
     }
 };
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
-class Chan<Var<Succ<T>>, IT, OT, std::pair<P, E>> {
-    CHAN_BASE
-
+class Chan<Var<Succ<T>>, IT, OT, std::pair<P, E>> : public ChanBase<IT, OT> {
 public:
+    using ChanBase<IT, OT>::ChanBase;
+
     Chan<Var<T>, IT, OT, E> ret() {
-        if (used) {
+        if (ChanBase<IT, OT>::used) {
             throw ChannelReusedError();
         }
 
-        used = true;
-        return Chan<P, IT, OT, E>(input, output);
+        ChanBase<IT, OT>::used = true;
+        return Chan<P, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
     }
 };
