@@ -5,11 +5,11 @@
 
 #define CHAN_BASE                                           \
     public:                                                 \
-        Chan(std::istream *input, std::ostream *output)     \
+        Chan(IT input, OT output)                           \
             : input(input), output(output), used(false) {}  \
     private:                                                \
-        std::istream *input;                                \
-        std::ostream *output;                               \
+        IT input;                                           \
+        OT output;                                          \
         bool used;
 
 template <typename T>
@@ -74,84 +74,84 @@ struct Var {
 
 struct ChannelReusedError {};
 
-template <HasDual P, typename E=Z>
+template <HasDual P, typename IT, typename OT, typename E=Z>
 class Chan {
     CHAN_BASE
 };
 
-template <typename T, HasDual P, typename E>
-class Chan<Recv<T, P>, E> {
+template <typename T, HasDual P, typename IT, typename OT, typename E>
+class Chan<Recv<T, P>, IT, OT, E> {
     CHAN_BASE
 
 public:
-    Chan<P, E> operator>>(T &t) {
+    Chan<P, IT, OT, E> operator>>(T &t) {
         if (used) {
             throw ChannelReusedError();
         }
 
         used = true;
-        std::istream &new_input = (*input) >> t;
-        return Chan<P, E>(&new_input, output);
+        input->operator>>(t);
+        return Chan<P, IT, OT, E>(input, output);
     }
 };
 
-template <typename T, HasDual P, typename E>
-class Chan<Send<T, P>, E> {
+template <typename T, HasDual P, typename IT, typename OT, typename E>
+class Chan<Send<T, P>, IT, OT, E> {
     CHAN_BASE
 
 public:
-    Chan<P, E> operator<<(const T &t) {
+    Chan<P, IT, OT, E> operator<<(const T &t) {
         if (used) {
             throw ChannelReusedError();
         }
 
         used = true;
-        std::ostream &new_output = (*output) << t;
-        return Chan<P, E>(input, &new_output);
+        output->operator<<(t);
+        return Chan<P, IT, OT, E>(input, output);
     }
 };
 
-template <HasDual P, typename E>
-class Chan<Rec<P>, E> {
+template <HasDual P, typename IT, typename OT, typename E>
+class Chan<Rec<P>, IT, OT, E> {
     CHAN_BASE
 
 public:
-    Chan<P, std::pair<Rec<P>, E>> enter() {
+    Chan<P, IT, OT, std::pair<Rec<P>, E>> enter() {
         if (used) {
             throw ChannelReusedError();
         }
 
         used = true;
-        return Chan<P, std::pair<Rec<P>, E>>(input, output);
+        return Chan<P, IT, OT, std::pair<Rec<P>, E>>(input, output);
     }
 };
 
-template <HasDual P, typename E>
-class Chan<Var<Z>, std::pair<P, E>> {
+template <HasDual P, typename IT, typename OT, typename E>
+class Chan<Var<Z>, IT, OT, std::pair<P, E>> {
     CHAN_BASE
 
 public:
-    Chan<P, E> ret() {
+    Chan<P, IT, OT, E> ret() {
         if (used) {
             throw ChannelReusedError();
         }
 
         used = true;
-        return Chan<P, E>(input, output);
+        return Chan<P, IT, OT, E>(input, output);
     }
 };
 
-template <typename T, HasDual P, typename E>
-class Chan<Var<Succ<T>>, std::pair<P, E>> {
+template <typename T, HasDual P, typename IT, typename OT, typename E>
+class Chan<Var<Succ<T>>, IT, OT, std::pair<P, E>> {
     CHAN_BASE
 
 public:
-    Chan<Var<T>, E> ret() {
+    Chan<Var<T>, IT, OT, E> ret() {
         if (used) {
             throw ChannelReusedError();
         }
 
         used = true;
-        return Chan<P, E>(input, output);
+        return Chan<P, IT, OT, E>(input, output);
     }
 };

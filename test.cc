@@ -1,6 +1,10 @@
+#include <condition_variable>
+#include <cstdio>
 #include <iostream>
 #include <memory>
-#include <semaphore>
+#include <mutex>
+#include <queue>
+#include <thread>
 #include <type_traits>
 #include <tuple>
 #include <variant>
@@ -143,48 +147,149 @@ struct ProtocolTypesImpl<std::variant<Ts...>, Rec<P>> {
     using type = typename ProtocolTypesImpl<std::variant<Ts...>, P>::type;
 };
 
+template <typename... Ts, IsNat N>
+struct ProtocolTypesImpl<std::variant<Ts...>, Var<N>> {
+    using type = std::variant<Ts...>;
+};
+
 template <HasDual P>
 using ProtocolTypes = MakeUniqueVariant<typename ProtocolTypesImpl<std::variant<>, P>::type>;
 
+std::mutex io_lock;
+
+void log(const std::string &tname, const std::string &action, int val) {
+    io_lock.lock();
+    printf("%s %s %d\n", tname.c_str(), action.c_str(), val);
+    io_lock.unlock();
+}
+
+/*
+ * A communication primitive for multiple threads to read/write shared data.
+ * Guarantees:
+ *  - No thread reads its own writes.
+ *  - Every write is read.
+ */
 template <HasDual P>
 class ConcurrentChannel {
 public:
-    ConcurrentChannel() :
-        available_reads(0),
-        available_writes(1) {}
+    ConcurrentChannel()
+        : was_read(true), writers_waiting(0), readers_waiting(0) {}
+
+     ConcurrentChannel(const ConcurrentChannel &other) = delete;
+
+     ConcurrentChannel& operator=(const ConcurrentChannel &other) = delete;
 
     template <typename T>
     ConcurrentChannel& operator<<(const T &value) {
-        available_writes.acquire();
+        std::unique_lock held_lock(lock);
+        while (!was_read) {
+            // Needs to be in a while loop to ignore "spurious wakeups".
+            // https://en.cppreference.com/w/cpp/thread/condition_variable/wait
+            writers_waiting++;
+            writer_cv.wait(held_lock);
+            writers_waiting--;
+        }
+
         data = value;
-        available_reads.release();
+        was_read = false;
+        write_source = std::this_thread::get_id();
+
+        if (readers_waiting > 0) {
+            reader_cv.notify_one();
+        }
+
         return *this;
     }
 
     template <typename T>
     ConcurrentChannel& operator>>(T &datum) {
-        available_reads.acquire();
+        std::unique_lock held_lock(lock);
+        while (write_source == std::this_thread::get_id() || was_read) {
+            readers_waiting++;
+            reader_cv.wait(held_lock);
+            readers_waiting--;
+        }
+
         datum = std::get<T>(data);
-        available_writes.release();
+        was_read = true;
+
+        if (writers_waiting > 0) {
+            writer_cv.notify_one();
+        }
+
         return *this;
     }
 
 private:
-    std::counting_semaphore<1> available_reads;
-    std::counting_semaphore<1> available_writes;
+    std::mutex lock;
+
+    int readers_waiting;
+    std::condition_variable reader_cv;
+
+    int writers_waiting;
+    std::condition_variable writer_cv;
+
     ProtocolTypes<P> data;
+    std::thread::id write_source;
+    bool was_read;
 };
 
+template <HasDual P,
+          std::invocable<Chan<P, std::shared_ptr<ConcurrentChannel<P>>, std::shared_ptr<ConcurrentChannel<P>>>> F,
+          std::invocable<Chan<typename P::dual, std::shared_ptr<ConcurrentChannel<P>>, std::shared_ptr<ConcurrentChannel<P>>>> G>
+std::pair<std::thread, std::thread> connect(F f, G g) {
+    std::shared_ptr<ConcurrentChannel<P>> inner_chan = std::make_shared<ConcurrentChannel<P>>();
+    Chan<P, decltype(inner_chan), decltype(inner_chan)> c1(inner_chan, inner_chan);
+
+    std::shared_ptr<ConcurrentChannel<P>> inner_chan2 = inner_chan;
+    Chan<typename P::dual, decltype(inner_chan), decltype(inner_chan)> c2(inner_chan2, inner_chan2);
+    return {std::thread(f, c1), std::thread(g, c2)};
+}
+
+using Protocol = Rec<Send<int, Recv<int, Var<Z>>>>;
+
+void t1(Chan<Protocol,
+             std::shared_ptr<ConcurrentChannel<Protocol>>,
+             std::shared_ptr<ConcurrentChannel<Protocol>>> chan) {
+    std::cout << "t1: " << std::this_thread::get_id() << std::endl;
+    auto c = chan.enter();
+    for (int i = 0; i < 5; i++) {
+        auto c1 = c << i;
+        log("T1", "sent", i);
+
+        int val;
+        auto c2 = c1 >> val;
+        log("T1", "received", val);
+
+        c = c2.ret().enter();
+    }
+    log("T1", "done", -1);
+}
+
+void t2(Chan<Protocol::dual,
+             std::shared_ptr<ConcurrentChannel<Protocol>>,
+             std::shared_ptr<ConcurrentChannel<Protocol>>> chan) {
+    std::cout << "t2: " << std::this_thread::get_id() << std::endl;
+    auto c = chan.enter();
+    for (int i = 0; i < 5; i++) {
+        int val;
+        auto c1 = c >> val;
+        log("T2", "received", val);
+
+        auto c2 = c1 << val * 2;
+        log("T2", "sent", val * 2);
+
+        c = c2.ret().enter();
+    }
+    log("T2", "done", -1);
+}
+
 int main() {
-    ProtocolTypes<Rec<Send<std::string, Recv<int, Recv<double, Recv<double, Z>>>>>> x;
+    auto threads = connect<Protocol>(t1, t2);
+    threads.first.join();
+    threads.second.join();
 
-    ConcurrentChannel<Rec<Send<std::string, Recv<int, Recv<double, Recv<double, Z>>>>>> ch;
-    ch << "hello world";
-
-    std::string val;
-    ch >> val;
-    std::cout << "Read: " << val << std::endl;
-    ch >> val;
+    //ch >> val;
 
     // UniqueVariant<int, char, int, char, float, char, std::string> v;
     // v = "hello world";

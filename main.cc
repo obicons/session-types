@@ -17,7 +17,10 @@ int main() {
     Send<int, Recv<int, Z>> y;
     f(x, y);
 
-    Chan<Rec<Recv<int, Send<std::string, Send<int, Send<ostream&(ostream&), Var<Z>>>>>>> ch(&cin, &cout);
+    Chan<
+        Rec<Recv<int, Send<std::string, Send<int, Send<ostream&(ostream&), Var<Z>>>>>>,
+        decltype(&cin),
+        decltype(&cout)> ch(&cin, &cout);
     int input = 0;
 
     while (input != -1) {
