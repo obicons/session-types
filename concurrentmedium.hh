@@ -39,7 +39,7 @@ struct ProtocolTypesImpl<std::variant<Ts...>, Recv<T, P>> {
 
 template <typename... Ts>
 struct ProtocolTypesImpl<std::variant<Ts...>, Z> {
-    using type = std::variant<Z, Ts...>;
+  using type = std::variant<Z, Ts...>;
 };
 
 template <typename... Ts, typename T, HasDual P>
@@ -64,11 +64,11 @@ template <typename T, typename V>
 struct OneOf : public std::false_type {};
 
 template <typename T, typename... Ts>
-struct OneOf<T, std::variant<Ts...>> : public std::conditional<
+struct OneOf<T, std::variant<Ts...>> : public std::conditional_t<
         (std::is_same_v<T, Ts> || ...),
         std::true_type,
         std::false_type
-    >::type
+    >
 {};
 
 template <typename T, typename V>

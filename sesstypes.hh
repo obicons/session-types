@@ -1,6 +1,8 @@
 #pragma once
 
+#include <__concepts/invocable.h>
 #include <concepts>
+#include <functional>
 #include <iostream>
 #include <type_traits>
 
@@ -60,6 +62,19 @@ struct Var {
     using dual = Var<T>;
 };
 
+template <HasDual P1, HasDual P2>
+struct Choose;
+
+template <HasDual P1, HasDual P2>
+struct Offer {
+  using dual = Choose<P1, P2>;
+};
+
+template <HasDual P1, HasDual P2>
+struct Choose {
+  using dual = Offer<P1, P2>;
+};
+
 struct ChannelReusedError {};
 
 template <typename IT, typename OT>
@@ -75,10 +90,7 @@ protected:
 };
 
 template <HasDual P, typename IT, typename OT, typename E=Z>
-class Chan : ChanBase<IT, OT> {
-public:
-    using ChanBase<IT, OT>::ChanBase;
-};
+class Chan;
 
 template <typename T, HasDual P, typename IT, typename OT, typename E>
 class Chan<Recv<T, P>, IT, OT, E> : ChanBase<IT, OT> {
@@ -155,4 +167,46 @@ public:
         ChanBase<IT, OT>::used = true;
         return Chan<P, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
     }
+};
+
+template <HasDual P1, HasDual P2, typename IT, typename OT, typename E>
+class Chan<Choose<P1, P2>, IT, OT, E> : ChanBase<IT, OT> {
+ public:
+  using ChanBase<IT, OT>::ChanBase;
+
+  Chan<P1, IT, OT, E> choose1() {
+    if (ChanBase<IT, OT>::used) {
+      throw ChannelReusedError();
+    }
+
+    ChanBase<IT, OT>::used = true;
+    return Chan<P1, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);
+  }
+
+  Chan<P2, IT, OT, E> choose2() {
+    if (ChanBase<IT, OT>::used) {
+      throw ChannelReusedError();
+    }
+
+    ChanBase<IT, OT>::used = true;
+    return Chan<P2, IT, OT, E>(ChanBase<IT, OT>::input, ChanBase<IT, OT>::output);    
+  }  
+};
+
+// template <HasDual P1, HasDual P2, typename IT, typename OT, typename E>
+// class Chan<Offer<P1, P2>, IT, OT, E> : ChanBase<IT, OT> {
+//  public:
+//   using ChanBase<IT, OT>::ChanBase;
+
+//   template <std::invocable<>
+//   void when_p1() {
+    
+//   }
+
+// };
+
+template <typename IT, typename OT, typename E>
+class Chan<Z, IT, OT, E> : ChanBase<IT, OT> {
+ public:
+  using ChanBase<IT, OT>::ChanBase;
 };
